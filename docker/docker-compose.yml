@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  aiflow-pg:
+    image: postgres:18
+    container_name: aiflow-pg
+    ports:
+      - 5433:5432
+    environment:
+      POSTGRES_USER: wxff
+      POSTGRES_PASSWORD: wxff_pwd
+      POSTGRES_DB: postgres
