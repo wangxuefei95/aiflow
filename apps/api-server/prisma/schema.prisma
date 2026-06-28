@@ -1,11 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -13,10 +8,318 @@ datasource db {
 }
 
 model User {
-  id    String @id @default(uuid())
-  email String @unique
-  name  String
+  id           String   @id @default(uuid()) @map("id")
+  email        String   @unique @map("email")
+  name         String   @map("name")
+  passwordHash String?  @map("password_hash")
+  avatar       String?  @map("avatar")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  createAt DateTime @default(now())
-  updateAt DateTime @updatedAt()
+  userRoles UserRole[]
+
+  apps App[]
+
+  knowledgeBases KnowledgeBase[]
+
+  apiKeys ApiKey[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @map("id")
+  name        String   @unique @map("name")
+  description String?  @map("description")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  userRoles   UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @map("id")
+  name        String   @unique @map("name")
+  resource    String   @map("resource")
+  action      String   @map("action")
+  description String?  @map("description")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId String @map("user_id")
+  roleId String @map("role_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+enum AppType {
+  WORKFLOW
+  CHATBOT
+  AGENT
+}
+
+model App {
+  id              String   @id @default(uuid()) @map("id")
+  name            String   @unique @map("name")
+  description     String?  @map("description")
+  icon            String?  @map("icon")
+  config          Json?    @map("config")
+  type            AppType  @default(WORKFLOW) @map("type")
+  tags            String[] @map("tags")
+  version         Int      @default(1) @map("version")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  deletedAt       DateTime?  @map("deleted_at")
+  isDeleted       Boolean  @default(false) @map("is_deleted")
+
+  userId          String   @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  workflows       Workflow[]
+  executions      WorkflowExecution[]
+
+  publishedId     String?  @map("published_id")
+  publishedVersions PublishedAppSnapshot[]
+
+  @@map("apps")
+}
+
+model Workflow {
+  id          String   @id @default(uuid()) @map("id")
+  name        String   @unique @map("name")
+  description String?  @map("description")
+  nodes       Json?    @map("nodes")
+  edges       Json?    @map("edges")
+  version     Int      @default(1) @map("version")
+
+  appId       String   @map("app_id")
+  app         App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([appId])
+  @@index([version])
+  @@map("workflows")
+}
+
+model PublishedAppSnapshot {
+  id          String   @id @default(uuid()) @map("id")
+  name        String   @unique @map("name")
+  version     Int      @default(1) @map("version")
+  description String?  @map("description")
+
+  nodes       Json?    @map("nodes")
+  edges       Json?    @map("edges")
+
+  appId       String   @map("app_id")
+  app         App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  publishedAt DateTime @default(now()) @map("published_at")
+  publishedBy String   @map("published_by")
+
+  executions      AppExecution[]
+
+  @@unique([appId, version])
+  @@index([appId])
+  @@index([version])
+  @@map("published_app_snapshots")
+}
+
+enum WorkflowExecutionStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model WorkflowExecution { 
+  id              String   @id @default(uuid()) @map("id")
+  executionId     String   @map("execution_id") @unique
+
+  status          WorkflowExecutionStatus @default(RUNNING) @map("status")
+
+  input           Json?    @map("input")
+  output          Json?    @map("output")
+  error           String?  @map("error")
+
+  duration        Int?     @default(0) @map("duration") // in milliseconds
+  totalTokens     Int      @default(0) @map("total_tokens")
+
+  // 节点执行轨迹
+  nodeTraces      Json?    @map("node_traces")
+
+  appId           String   @map("app_id")
+  app             App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  startedTime     DateTime @default(now()) @map("started_time")
+  completedTime     DateTime?  @map("completed_time")
+
+  @@index([appId])
+  @@index([status])
+  @@index([startedTime])
+  @@map("workflow_executions")
+}
+
+
+model AppExecution {
+  id              String   @id @default(uuid()) @map("id")
+  executionId     String   @map("execution_id") @unique
+
+  status          WorkflowExecutionStatus @default(RUNNING) @map("status")
+  // 输入与输出
+  input           Json?    @map("input")
+  output          Json?    @map("output")
+  error           String?  @map("error")
+
+  // 执行统计
+  duration        Int?     @default(0) @map("duration") // in milliseconds
+  totalTokens     Int      @default(0) @map("total_tokens")
+
+  // 节点执行轨迹
+  nodeTraces      Json?    @map("node_traces")
+
+  // 关联发布版本
+  publishedAppId  String   @map("published_app_id")
+  publishedApp    PublishedAppSnapshot @relation(fields: [publishedAppId], references: [id], onDelete: Cascade)
+
+  // 关联API密钥
+  apiKeyId        String   @map("api_key_id")
+  apiKey          ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  
+  // 执行时间
+  startedTime     DateTime @default(now()) @map("started_time")
+  completedTime   DateTime?  @map("completed_time")
+
+  @@index([publishedAppId])
+  @@index([status])
+  @@index([startedTime])
+  @@map("app_executions")
+}
+
+model ApiKey {
+  id              String   @id @default(uuid()) @map("id")
+  name            String   @map("name")
+  key             String   @map("key") @unique
+  keyPrefix       String   @map("key_prefix")
+
+  // 状态与权限
+  isActive        Boolean  @default(true) @map("is_active")
+  expiresAt       DateTime?  @map("expires_at")
+
+  // 使用统计
+  lastUsedAt      DateTime?  @map("last_used_at")
+  totalCalls      Int      @default(0) @map("total_calls")
+
+  // 关联用户
+  userId          String   @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 执行记录
+  executions      AppExecution[]
+
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("api_keys")
+}
+
+model KnowledgeBase {
+  id                String    @id @default(uuid()) @map("id")
+  name              String    @unique @map("name")
+  description       String?   @map("description")
+  icon              String    @map("icon")
+  
+  embeddingModel    RetrievalModel    @map("embedding_model") 
+  embeddingProvider String    @map("embedding_provider")
+  dimensions        Int       @map("dimensions") @default(1024)
+
+  chunkSize         Int       @map("chunk_size") @default(500)
+  chunkOverlap      Int       @map("chunk_overlap") @default(50)
+
+  retrievalModel    String    @map("retrieval_model")
+  vectorWeight      Float     @map("vector_weight") @default(0.7)
+  topK              Int       @map("top_k") @default(5)
+  threshold         Float     @map("threshold") @default(0.2)
+
+  documentCount     Int       @default(0) @map("document_count")
+  chunkCount        Int       @default(0) @map("chunk_count")
+  status            KnowledgeBaseStatus @default(READY) @map("status")
+
+  documents         Document[]
+
+  userId            String    @map("user_id")
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt         DateTime  @default(now()) @map("created_at") 
+  updatedAt         DateTime  @default(now()) @map("updated_at")
+
+  @@index([userId])
+  @@index([status])
+  @@map("knowledge_bases")
+}
+
+enum RetrievalModel {
+  VECTOR
+  FULL_TEXT
+  HYBRID
+}
+
+enum KnowledgeBaseStatus {
+  READY
+  INDEXING
+  ERROR
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  ERROR
+}
+
+
+
+model Document {
+  id              String    @id @default(uuid()) @map("id")
+  name            String    @unique @map("name")
+  originalName    String    @map("original_name")
+  mimeType        String    @map("mime_type")
+  size            Int       @map("size")
+  content         String    @map("content")
+
+  status          DocumentStatus @default(PENDING) @map("status")
+  errorMessage    String?   @map("error_message")
+
+  chunkCount      Int       @default(0) @map("chunk_count")
+  processedAt     DateTime?  @map("processed_at")
+
+  knowledgeBaseId String    @map("knowledge_base_id")
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime  @default(now()) @map("created_at") 
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  @@index([knowledgeBaseId])
+  @@index([status])
+  @@map("documents")
 }
